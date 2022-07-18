@@ -411,41 +411,42 @@ func AfterReadingAllFlags(t *TestContextType) {
 			t.Host = defaultHost
 		}
 	}
+	// KCP api object don't have node object
 	// Allow 1% of nodes to be unready (statistically) - relevant for large clusters.
-	if t.AllowedNotReadyNodes == 0 {
-		t.AllowedNotReadyNodes = t.CloudConfig.NumNodes / 100
-	}
+	// if t.AllowedNotReadyNodes == 0 {
+	// 	t.AllowedNotReadyNodes = t.CloudConfig.NumNodes / 100
+	// }
 
-	klog.Infof("Tolerating taints %q when considering if nodes are ready", TestContext.NonblockingTaints)
+	// klog.V(4).Infof("Tolerating taints %q when considering if nodes are ready", TestContext.NonblockingTaints)
 
 	// Make sure that all test runs have a valid TestContext.CloudConfig.Provider.
 	// TODO: whether and how long this code is needed is getting discussed
 	// in https://github.com/kubernetes/kubernetes/issues/70194.
-	if TestContext.Provider == "" {
-		// Some users of the e2e.test binary pass --provider=.
-		// We need to support that, changing it would break those usages.
-		Logf("The --provider flag is not set. Continuing as if --provider=skeleton had been used.")
-		TestContext.Provider = "skeleton"
-	}
+	// if TestContext.Provider == "" {
+	// 	// Some users of the e2e.test binary pass --provider=.
+	// 	// We need to support that, changing it would break those usages.
+	// 	Logf("The --provider flag is not set. Continuing as if --provider=skeleton had been used.")
+	// 	TestContext.Provider = "skeleton"
+	// }
 
-	var err error
-	TestContext.CloudConfig.Provider, err = SetupProviderConfig(TestContext.Provider)
-	if err != nil {
-		if os.IsNotExist(errors.Cause(err)) {
-			// Provide a more helpful error message when the provider is unknown.
-			var providers []string
-			for _, name := range GetProviders() {
-				// The empty string is accepted, but looks odd in the output below unless we quote it.
-				if name == "" {
-					name = `""`
-				}
-				providers = append(providers, name)
-			}
-			sort.Strings(providers)
-			klog.Errorf("Unknown provider %q. The following providers are known: %v", TestContext.Provider, strings.Join(providers, " "))
-		} else {
-			klog.Errorf("Failed to setup provider config for %q: %v", TestContext.Provider, err)
-		}
-		os.Exit(1)
-	}
+	// var err error
+	// TestContext.CloudConfig.Provider, err = SetupProviderConfig(TestContext.Provider)
+	// if err != nil {
+	// 	if os.IsNotExist(errors.Unwrap(err)) {
+	// 		// Provide a more helpful error message when the provider is unknown.
+	// 		var providers []string
+	// 		for _, name := range GetProviders() {
+	// 			// The empty string is accepted, but looks odd in the output below unless we quote it.
+	// 			if name == "" {
+	// 				name = `""`
+	// 			}
+	// 			providers = append(providers, name)
+	// 		}
+	// 		sort.Strings(providers)
+	// 		klog.Errorf("Unknown provider %q. The following providers are known: %v", TestContext.Provider, strings.Join(providers, " "))
+	// 	} else {
+	// 		klog.Errorf("Failed to setup provider config for %q: %v", TestContext.Provider, err)
+	// 	}
+	// 	os.Exit(1)
+	// }
 }
