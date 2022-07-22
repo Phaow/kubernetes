@@ -18,6 +18,7 @@ package framework
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"runtime/debug"
 	"strings"
@@ -45,6 +46,13 @@ func Logf(format string, args ...interface{}) {
 // Failf logs the fail info, including a stack trace.
 func Failf(format string, args ...interface{}) {
 	FailfWithOffset(1, format, args...)
+}
+
+// Debugf logs the debuginfo.
+func Debugf(format string, args ...interface{}) {
+	if logLevel := os.Getenv("E2E_TEST_LOG_LEVEL"); logLevel == "DEBUG" {
+		log("DEBUG", format, args...)
+	}
 }
 
 // FailfWithOffset calls "Fail" and logs the error with a stack trace that starts at "offset" levels above its caller

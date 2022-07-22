@@ -35,7 +35,6 @@ import (
 	runtimeutils "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/component-base/logs"
-	"k8s.io/component-base/version"
 	commontest "k8s.io/kubernetes/test/e2e/common"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2elog "k8s.io/kubernetes/test/e2e/framework/log"
@@ -269,7 +268,8 @@ func setupSuite() {
 	//}
 
 	// Log the version of the server and this client.
-	framework.Logf("e2e test version: %s", version.Get().GitVersion)
+	// Not suitable for kcp test remove the info
+	// framework.Logf("e2e test version: %s", version.Get().GitVersion)
 
 	dc := c.DiscoveryClient
 
