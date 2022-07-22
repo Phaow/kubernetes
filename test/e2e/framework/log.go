@@ -35,12 +35,12 @@ func nowStamp() string {
 }
 
 func log(level string, format string, args ...interface{}) {
-	fmt.Fprintf(ginkgo.GinkgoWriter, nowStamp()+": "+level+": "+format+"\n", args...)
+	fmt.Fprintf(ginkgo.GinkgoWriter, level+" "+nowStamp()+": "+format+"[0m"+"\n", args...)
 }
 
 // Logf logs the info.
 func Logf(format string, args ...interface{}) {
-	log("INFO", format, args...)
+	log("\033[32;40;3mINFO", format, args...)
 }
 
 // Failf logs the fail info, including a stack trace.
@@ -51,7 +51,7 @@ func Failf(format string, args ...interface{}) {
 // Debugf logs the debuginfo.
 func Debugf(format string, args ...interface{}) {
 	if logLevel := os.Getenv("E2E_TEST_LOG_LEVEL"); logLevel == "DEBUG" {
-		log("DEBUG", format, args...)
+		log("\033[34;40;3mDEBUG", format, args...)
 	}
 }
 
