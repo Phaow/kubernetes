@@ -40,6 +40,7 @@ func log(level string, format string, args ...interface{}) {
 
 // Logf logs the info.
 func Logf(format string, args ...interface{}) {
+	format = "\033[32;40;3m" + format + "[0m"
 	log("INFO", format, args...)
 }
 
@@ -51,6 +52,7 @@ func Failf(format string, args ...interface{}) {
 // Debugf logs the debuginfo.
 func Debugf(format string, args ...interface{}) {
 	if logLevel := os.Getenv("E2E_TEST_LOG_LEVEL"); logLevel == "DEBUG" {
+		format = "\033[34;40;3m" + format + "[0m"
 		log("DEBUG", format, args...)
 	}
 }
