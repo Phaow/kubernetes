@@ -32,14 +32,14 @@ import (
 // and then the function that only runs on the first Ginkgo node.
 func CleanupSuite() {
 	// Run on all Ginkgo nodes
-	Logf("Running AfterSuite actions on all nodes")
+	// Logf("Running AfterSuite actions on all nodes")
 	RunCleanupActions()
 }
 
 // AfterSuiteActions are actions that are run on ginkgo's SynchronizedAfterSuite
 func AfterSuiteActions() {
 	// Run only Ginkgo on node 1
-	Logf("Running AfterSuite actions on node 1")
+	// Logf("Running AfterSuite actions on node 1")
 	if TestContext.ReportDir != "" {
 		CoreDump(TestContext.ReportDir)
 	}

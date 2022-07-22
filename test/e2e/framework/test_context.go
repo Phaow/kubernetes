@@ -416,7 +416,7 @@ func AfterReadingAllFlags(t *TestContextType) {
 		t.AllowedNotReadyNodes = t.CloudConfig.NumNodes / 100
 	}
 
-	klog.Infof("Tolerating taints %q when considering if nodes are ready", TestContext.NonblockingTaints)
+	// klog.Infof("Tolerating taints %q when considering if nodes are ready", TestContext.NonblockingTaints)
 
 	// Make sure that all test runs have a valid TestContext.CloudConfig.Provider.
 	// TODO: whether and how long this code is needed is getting discussed
@@ -424,7 +424,7 @@ func AfterReadingAllFlags(t *TestContextType) {
 	if TestContext.Provider == "" {
 		// Some users of the e2e.test binary pass --provider=.
 		// We need to support that, changing it would break those usages.
-		Logf("The --provider flag is not set. Continuing as if --provider=skeleton had been used.")
+		// Logf("The --provider flag is not set. Continuing as if --provider=skeleton had been used.")
 		TestContext.Provider = "skeleton"
 	}
 

@@ -269,7 +269,8 @@ func setupSuite() {
 	//}
 
 	// Log the version of the server and this client.
-	framework.Logf("e2e test version: %s", version.Get().GitVersion)
+	// Not suitable for kcp test remove the info
+	// framework.Logf("e2e test version: %s", version.Get().GitVersion)
 
 	dc := c.DiscoveryClient
 
