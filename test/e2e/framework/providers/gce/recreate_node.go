@@ -87,10 +87,6 @@ var _ = ginkgo.Describe("Recreate [Feature:Recreate]", func() {
 			ps.Stop()
 		}
 	})
-
-	ginkgo.It("recreate nodes and ensure they function upon restart", func() {
-		testRecreate(f.ClientSet, ps, systemNamespace, originalNodes, originalPodNames)
-	})
 })
 
 // Recreate all the nodes in the test instance group

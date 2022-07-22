@@ -47,6 +47,13 @@ func Failf(format string, args ...interface{}) {
 	FailfWithOffset(1, format, args...)
 }
 
+// Debugf logs the debuginfo.
+func Debugf(format string, args ...interface{}) {
+	if logLevel := os.Getenv("E2E_TEST_LOG_LEVEL"); logLevel == "DEBUG" {
+		log("DEBUG", format, args...)
+	}
+}
+
 // FailfWithOffset calls "Fail" and logs the error with a stack trace that starts at "offset" levels above its caller
 // (for example, for call chain f -> g -> FailfWithOffset(1, ...) error would be logged for "f").
 func FailfWithOffset(offset int, format string, args ...interface{}) {
