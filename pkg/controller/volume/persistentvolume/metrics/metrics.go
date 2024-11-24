@@ -183,8 +183,8 @@ func (collector *pvAndPVCCountCollector) CollectWithStability(ch chan<- metrics.
 }
 
 func (collector *pvAndPVCCountCollector) getPVPluginName(pv *v1.PersistentVolume) string {
-	spec := volume.NewSpecFromPersistentVolume(pv, true)
-	klog.V(1).Infof("=== Spec is -> %v ===", &spec)
+	spec := volume.NewSpecFromPersistentVolume(pv, false)
+	klog.V(1).Infof("=== Spec is -> %+v ===", spec.PersistentVolume)
 	fullPluginName := pluginNameNotAvailable
 	plugin, err := collector.pluginMgr.FindPluginBySpec(spec)
 	klog.V(1).Infof("=== Plugin is -> %v ===", plugin)
