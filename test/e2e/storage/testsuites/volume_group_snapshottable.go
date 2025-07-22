@@ -19,6 +19,7 @@ package testsuites
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 
 	"github.com/onsi/ginkgo/v2"
@@ -181,6 +182,14 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 				status := snapshot.VGS.Object["status"]
 				err := framework.Gomega().Expect(status).NotTo(gomega.BeNil())
 				framework.ExpectNoError(err, "failed to get status of group snapshot")
+				// Marshal the object to pretty JSON
+				jsonData, err := json.MarshalIndent(snapshot.VGS.Object, "", "  ")
+				if err != nil {
+					framework.Logf("Error marshaling VGS: %v\n", err)
+					return
+				}
+
+				framework.Logf("VGS Details:\n%s\n", string(jsonData))
 
 				volumeListMap := snapshot.VGSContent.Object["status"].(map[string]interface{})
 				err = framework.Gomega().Expect(volumeListMap).NotTo(gomega.BeNil())
@@ -196,7 +205,7 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 					volumeHandle := volume.(map[string]interface{})["volumeHandle"].(string)
 					err = framework.Gomega().Expect(volumeHandle).NotTo(gomega.BeNil())
 					framework.ExpectNoError(err, "failed to get volume handle from volume")
-					uid := snapshot.VGSContent.Object["metadata"].(map[string]interface{})["uid"].(string)
+					uid := snapshot.VGS.Object["metadata"].(map[string]interface{})["uid"].(string)
 					err = framework.Gomega().Expect(uid).NotTo(gomega.BeNil())
 					framework.ExpectNoError(err, "failed to get uuid from content")
 					volumeSnapshotName := fmt.Sprintf("snapshot-%x", sha256.Sum256([]byte(
