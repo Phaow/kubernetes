@@ -38,6 +38,7 @@ import (
 	e2estatefulset "k8s.io/kubernetes/test/e2e/framework/statefulset"
 	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
+	storageutils "k8s.io/kubernetes/test/e2e/storage/utils"
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
@@ -59,6 +60,7 @@ type VolumeGroupSnapshottableTestSuite struct {
 func InitVolumeGroupSnapshottableTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.VolumeGroupSnapshotDelete,
+		storageframework.VolumeGroupSnapshotRetain,
 	}
 	return InitCustomGroupSnapshottableTestSuite(patterns)
 }
@@ -342,6 +344,147 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 					framework.Logf("Data consistency verified for StatefulSet volume %s (from %s): found expected data '%s'", pvc.Name, originalPVCName, expectedData)
 				}
 
+			})
+
+			ginkgo.It("should retain snapshots when deletion policy is Retain", func(ctx context.Context) {
+				if pattern.SnapshotDeletionPolicy != storageframework.RetainSnapshot {
+					e2eskipper.Skipf("Test only applies to patterns with Retain deletion policy")
+				}
+
+				init(ctx)
+				createStatefulSetAndVolumes(ctx)
+				ginkgo.DeferCleanup(cleanup)
+
+				originalMntTestData := writeTestDataToVolumes(ctx)
+
+				snapshot := storageframework.CreateVolumeGroupSnapshotResource(ctx, snapshottableDriver, groupTest.config, pattern, labelValue, f.Namespace.Name, f.Timeouts, map[string]string{"deletionPolicy": pattern.SnapshotDeletionPolicy.String()})
+				groupTest.snapshots = append(groupTest.snapshots, snapshot)
+
+				ginkgo.By("verifying the snapshots in the group are ready to use")
+				status := snapshot.VGS.Object["status"]
+				err := framework.Gomega().Expect(status).NotTo(gomega.BeNil())
+				framework.ExpectNoError(err, "failed to get status of group snapshot")
+
+				volumeListMap := snapshot.VGSContent.Object["status"].(map[string]interface{})
+				err = framework.Gomega().Expect(volumeListMap).NotTo(gomega.BeNil())
+				framework.ExpectNoError(err, "failed to get volume snapshot list")
+				volumeSnapshotHandlePairList := volumeListMap["volumeSnapshotHandlePairList"].([]interface{})
+				err = framework.Gomega().Expect(volumeSnapshotHandlePairList).NotTo(gomega.BeNil())
+				framework.ExpectNoError(err, "failed to get volume snapshot list")
+				err = framework.Gomega().Expect(len(volumeSnapshotHandlePairList)).To(gomega.Equal(groupTest.numReplicas))
+				framework.ExpectNoError(err, "failed to get volume snapshot list")
+
+				// Store snapshot names for later verification
+				var snapshotNames []string
+				for _, volume := range volumeSnapshotHandlePairList {
+					volumeHandle := volume.(map[string]interface{})["volumeHandle"].(string)
+					uid := snapshot.VGS.Object["metadata"].(map[string]interface{})["uid"].(string)
+					volumeSnapshotName := fmt.Sprintf("snapshot-%x", sha256.Sum256([]byte(uid+volumeHandle)))
+					snapshotNames = append(snapshotNames, volumeSnapshotName)
+				}
+
+				ginkgo.By("deleting the VolumeGroupSnapshot")
+				vgsName := snapshot.VGS.GetName()
+				vgsNamespace := snapshot.VGS.GetNamespace()
+				dc := groupTest.config.Framework.DynamicClient
+				err = dc.Resource(storageutils.VolumeGroupSnapshotGVR).Namespace(vgsNamespace).Delete(ctx, vgsName, metav1.DeleteOptions{})
+				framework.ExpectNoError(err, "failed to delete VolumeGroupSnapshot")
+
+				// Wait for VGS to be deleted
+				framework.Logf("Waiting for VolumeGroupSnapshot %s to be deleted", vgsName)
+				err = storageutils.WaitForNamespacedGVRDeletion(ctx, dc, storageutils.VolumeGroupSnapshotGVR, vgsNamespace, vgsName, framework.Poll, f.Timeouts.PVDelete)
+				framework.ExpectNoError(err, "VolumeGroupSnapshot was not deleted within timeout")
+
+				ginkgo.By("verifying individual VolumeSnapshots are retained due to Retain policy")
+				// With Retain policy, the individual VolumeSnapshots should still exist
+				for _, snapshotName := range snapshotNames {
+					framework.Logf("Checking that VolumeSnapshot %s still exists", snapshotName)
+					vs, err := dc.Resource(storageutils.SnapshotGVR).Namespace(vgsNamespace).Get(ctx, snapshotName, metav1.GetOptions{})
+					framework.ExpectNoError(err, "VolumeSnapshot %s should still exist with Retain policy", snapshotName)
+					err = framework.Gomega().Expect(vs).NotTo(gomega.BeNil())
+					framework.ExpectNoError(err, "VolumeSnapshot %s should not be nil", snapshotName)
+
+					// Verify the snapshot is ready
+					status := vs.Object["status"]
+					if status != nil {
+						readyToUse, exists := status.(map[string]interface{})["readyToUse"]
+						if exists && readyToUse.(bool) {
+							framework.Logf("VolumeSnapshot %s is ready to use", snapshotName)
+						}
+					}
+
+					// Clean up the retained snapshots manually
+					ginkgo.DeferCleanup(func(ctx context.Context, snapName string, namespace string) {
+						framework.Logf("Cleaning up retained VolumeSnapshot %s", snapName)
+						err := dc.Resource(storageutils.SnapshotGVR).Namespace(namespace).Delete(ctx, snapName, metav1.DeleteOptions{})
+						if err != nil {
+							framework.Logf("Warning: failed to clean up VolumeSnapshot %s: %v", snapName, err)
+						}
+					}, snapshotName, vgsNamespace)
+				}
+
+				ginkgo.By("verifying that restored volumes from retained snapshots work correctly")
+				// Test that we can still restore from the retained snapshots
+				claimSize := s.GetTestSuiteInfo().SupportedSizeRange.Min
+				volumeHandleToPVCName := make(map[string]string)
+
+				// Create mapping from volume handles to original PVC names for StatefulSet
+				for i := 0; i < groupTest.numReplicas; i++ {
+					pvcName := fmt.Sprintf("data-%s-%d", groupTest.statefulSet.Name, i)
+					pvc, err := cs.CoreV1().PersistentVolumeClaims(f.Namespace.Name).Get(ctx, pvcName, metav1.GetOptions{})
+					framework.ExpectNoError(err, "failed to get PVC %s", pvcName)
+
+					pv, err := cs.CoreV1().PersistentVolumes().Get(ctx, pvc.Spec.VolumeName, metav1.GetOptions{})
+					framework.ExpectNoError(err, "failed to get PV for PVC %s", pvcName)
+					volumeHandle := pv.Spec.CSI.VolumeHandle
+					volumeHandleToPVCName[volumeHandle] = pvcName
+				}
+
+				// Create one restored PVC to verify data consistency
+				if len(volumeSnapshotHandlePairList) > 0 {
+					volume := volumeSnapshotHandlePairList[0]
+					volumeHandle := volume.(map[string]interface{})["volumeHandle"].(string)
+					originalPVCName := volumeHandleToPVCName[volumeHandle]
+					restoredPVCName := fmt.Sprintf("retained-restored-%s", originalPVCName)
+
+					pvc := e2epv.MakePersistentVolumeClaim(e2epv.PersistentVolumeClaimConfig{
+						StorageClassName: &groupTest.volumeResources[0].Sc.Name,
+						ClaimSize:        claimSize,
+						Name:             restoredPVCName,
+					}, f.Namespace.Name)
+
+					group := "snapshot.storage.k8s.io"
+					pvc.Spec.DataSource = &v1.TypedLocalObjectReference{
+						APIGroup: &group,
+						Kind:     "VolumeSnapshot",
+						Name:     snapshotNames[0],
+					}
+
+					pvc, err = cs.CoreV1().PersistentVolumeClaims(f.Namespace.Name).Create(ctx, pvc, metav1.CreateOptions{})
+					framework.ExpectNoError(err, "failed to create PVC from retained snapshot")
+
+					// Create a simple pod to verify the data
+					podConfig := e2epod.Config{
+						NS:           f.Namespace.Name,
+						PVCs:         []*v1.PersistentVolumeClaim{pvc},
+						SeLinuxLabel: e2epv.SELinuxLabel,
+					}
+					testPod, err := e2epod.MakeSecPod(&podConfig)
+					framework.ExpectNoError(err, "failed to create test pod config")
+
+					testPod, err = cs.CoreV1().Pods(f.Namespace.Name).Create(ctx, testPod, metav1.CreateOptions{})
+					framework.ExpectNoError(err, "failed to create test pod")
+					ginkgo.DeferCleanup(e2epod.DeletePodWithWait, cs, testPod)
+					framework.ExpectNoError(e2epod.WaitTimeoutForPodRunningInNamespace(ctx, cs, testPod.Name, testPod.Namespace, f.Timeouts.PodStartSlow), "Test pod did not start in expected time")
+
+					// Verify data consistency
+					expectedData := originalMntTestData[originalPVCName]
+					readPath := "/mnt/volume1/testfile"
+					commands := e2evolume.GenerateReadFileCmd(readPath)
+					_, err = e2eoutput.LookForStringInPodExec(testPod.Namespace, testPod.Name, commands, expectedData, time.Minute)
+					framework.ExpectNoError(err, "data verification failed for retained snapshot: expected '%s'", expectedData)
+					framework.Logf("Data consistency verified for retained snapshot: found expected data '%s'", expectedData)
+				}
 			})
 		})
 	})

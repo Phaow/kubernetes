@@ -18,6 +18,7 @@ package framework
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/onsi/ginkgo/v2"
@@ -84,6 +85,8 @@ func CreateVolumeGroupSnapshot(ctx context.Context, sDriver VoulmeGroupSnapshott
 	framework.ExpectNoError(err, "Failed to create volume group snapshot class")
 	gsclass, err = dc.Resource(utils.VolumeGroupSnapshotClassGVR).Get(ctx, gsclass.GetName(), metav1.GetOptions{})
 	framework.ExpectNoError(err, "Failed to get volume group snapshot class")
+	b, _ := json.MarshalIndent(gsclass.Object, "", "  ")
+	framework.Logf("---> %s", string(b))
 
 	ginkgo.By("creating a dynamic VolumeGroupSnapshot")
 	// Prepare a dynamically provisioned group volume snapshot with certain data
