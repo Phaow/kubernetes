@@ -39,6 +39,7 @@ import (
 	e2estatefulset "k8s.io/kubernetes/test/e2e/framework/statefulset"
 	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
+	storageutils "k8s.io/kubernetes/test/e2e/storage/utils"
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
@@ -60,6 +61,9 @@ type VolumeGroupSnapshottableTestSuite struct {
 func InitVolumeGroupSnapshottableTestSuite() storageframework.TestSuite {
 	patterns := []storageframework.TestPattern{
 		storageframework.VolumeGroupSnapshotDelete,
+		storageframework.VolumeGroupSnapshotRetain,
+		storageframework.PreprovisionedVolumeGroupSnapshotDelete,
+		storageframework.PreprovisionedVolumeGroupSnapshotRetain,
 	}
 	return InitCustomGroupSnapshottableTestSuite(patterns)
 }
@@ -282,6 +286,49 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 				ginkgo.DeferCleanup(cleanupResources)
 
 				originalMntTestData := writeTestDataToVolumes(ctx)
+
+				// Checkpoint: Delete the StatefulSet and wait for volumes to be unstaged
+				// This ensures data is flushed to disk before taking the snapshot
+				ginkgo.By("deleting the StatefulSet to ensure data is flushed")
+				for _, pod := range groupTest.pods {
+					framework.Logf("pod %s running on node %s", pod.Name, pod.Spec.NodeName)
+				}
+				e2estatefulset.DeleteAllStatefulSets(ctx, cs, groupTest.statefulSet.Namespace)
+				groupTest.statefulSet = nil // Mark as deleted to avoid double cleanup
+
+				// Wait for all volumes to be unstaged from nodes
+				ginkgo.By("waiting for all volumes to be unstaged from nodes")
+				for i, pod := range groupTest.pods {
+					pvcName := fmt.Sprintf("data-%s-%d", fmt.Sprintf("statefulset-vgs-%s", f.Namespace.Name), i)
+					pvc, err := cs.CoreV1().PersistentVolumeClaims(f.Namespace.Name).Get(ctx, pvcName, metav1.GetOptions{})
+					framework.ExpectNoError(err, "failed to get PVC %s", pvcName)
+
+					pv, err := cs.CoreV1().PersistentVolumes().Get(ctx, pvc.Spec.VolumeName, metav1.GetOptions{})
+					framework.ExpectNoError(err, "failed to get PV for PVC %s", pvcName)
+
+					volumeHandle := pv.Spec.CSI.VolumeHandle
+					nodeName := pod.Spec.NodeName
+					gomega.Expect(nodeName).NotTo(gomega.BeEmpty(), "pod.Spec.NodeName must not be empty")
+
+					framework.Logf("waiting for volume %s to be unstaged from node %s", volumeHandle, nodeName)
+					success := storageutils.WaitUntil(framework.Poll, f.Timeouts.PVDelete, func() bool {
+						node, err := cs.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+						framework.ExpectNoError(err)
+						volumesInUse := node.Status.VolumesInUse
+						framework.Logf("node %s volumes in use: %+v", nodeName, volumesInUse)
+						for j := 0; j < len(volumesInUse); j++ {
+							if strings.HasSuffix(string(volumesInUse[j]), volumeHandle) {
+								return false
+							}
+						}
+						return true
+					})
+					if !success {
+						framework.Failf("timed out waiting for node=%s to unstage volume=%s", nodeName, volumeHandle)
+					}
+				}
+
+				ginkgo.By("creating volume group snapshot after volumes are unstaged")
 				snapshot := storageframework.CreateVolumeGroupSnapshotResource(ctx, snapshottableDriver, groupTest.config, pattern, labelValue, f.Namespace.Name, f.Timeouts, map[string]string{"deletionPolicy": pattern.SnapshotDeletionPolicy.String()})
 				groupTest.snapshots = append(groupTest.snapshots, snapshot)
 

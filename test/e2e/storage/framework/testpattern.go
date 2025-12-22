@@ -61,7 +61,10 @@ var (
 	// PreprovisionedCreatedSnapshot represents a snapshot type for pre-provisioned snapshot
 	PreprovisionedCreatedSnapshot TestSnapshotType = "PreprovisionedSnapshot"
 
-	VolumeGroupSnapshot TestSnapshotType = "VolumeGroupSnapshot"
+	// DynamicVolumeGroupSnapshot represents a snapshot type for dynamic volume group snapshot
+	DynamicVolumeGroupSnapshot TestSnapshotType = "DynamicVolumeGroupSnapshot"
+	// PreprovisionedVolumeGroupSnapshot represents a snapshot type for pre-provisioned volume group snapshot
+	PreprovisionedVolumeGroupSnapshot TestSnapshotType = "PreprovisionedVolumeGroupSnapshot"
 )
 
 // TestSnapshotDeletionPolicy represents the deletion policy of the snapshot class
@@ -323,9 +326,30 @@ var (
 
 	// VolumeGroupSnapshotDelete is TestPattern for "VolumeGroupSnapshot"
 	VolumeGroupSnapshotDelete = TestPattern{
-		Name:                   " (delete policy)",
-		SnapshotType:           VolumeGroupSnapshot,
+		Name:                   "Dynamic VolumeGroupSnapshot (delete policy)",
+		SnapshotType:           DynamicVolumeGroupSnapshot,
 		SnapshotDeletionPolicy: DeleteSnapshot,
+		VolType:                DynamicPV,
+	}
+	// VolumeGroupSnapshotRetain is TestPattern for "VolumeGroupSnapshot"
+	VolumeGroupSnapshotRetain = TestPattern{
+		Name:                   "Dynamic VolumeGroupSnapshot (retain policy)",
+		SnapshotType:           DynamicVolumeGroupSnapshot,
+		SnapshotDeletionPolicy: RetainSnapshot,
+		VolType:                DynamicPV,
+	}
+	// PreprovisionedVolumeGroupSnapshotDelete is TestPattern for "Pre-provisioned VolumeGroupSnapshot"
+	PreprovisionedVolumeGroupSnapshotDelete = TestPattern{
+		Name:                   "Pre-provisioned VolumeGroupSnapshot (delete policy)",
+		SnapshotType:           PreprovisionedVolumeGroupSnapshot,
+		SnapshotDeletionPolicy: DeleteSnapshot,
+		VolType:                DynamicPV,
+	}
+	// PreprovisionedVolumeGroupSnapshotRetain is TestPattern for "Pre-provisioned VolumeGroupSnapshot"
+	PreprovisionedVolumeGroupSnapshotRetain = TestPattern{
+		Name:                   "Pre-provisioned VolumeGroupSnapshot (retain policy)",
+		SnapshotType:           PreprovisionedVolumeGroupSnapshot,
+		SnapshotDeletionPolicy: RetainSnapshot,
 		VolType:                DynamicPV,
 	}
 	// PreprovisionedSnapshotDelete is TestPattern for "Pre-provisioned snapshot"
