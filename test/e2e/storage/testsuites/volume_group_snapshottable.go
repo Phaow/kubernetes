@@ -39,6 +39,7 @@ import (
 	e2estatefulset "k8s.io/kubernetes/test/e2e/framework/statefulset"
 	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
+	"k8s.io/kubernetes/test/e2e/storage/utils"
 	admissionapi "k8s.io/pod-security-admission/api"
 )
 
@@ -358,11 +359,37 @@ func (s *VolumeGroupSnapshottableTestSuite) DefineTests(driver storageframework.
 						restoredPVCs = append(restoredPVCs, pvc)
 					}
 				} else {
-					// For pre-provisioned snapshots, use PreProvisionedVolumeSnapshots list
-					gomega.Expect(snapshot.PreProvisionedVolumeSnapshots).Should(gomega.HaveLen(groupTest.numReplicas), "failed to verify pre-provisioned snapshot count")
+					// For pre-provisioned snapshots, query VolumeSnapshots owned by the VGS
+					dc := f.DynamicClient
+					vgsList, err := dc.Resource(utils.VolumeGroupSnapshotGVR).Namespace(f.Namespace.Name).List(ctx, metav1.ListOptions{})
+					framework.ExpectNoError(err, "failed to list VolumeGroupSnapshots")
+
+					var vgsUID string
+					for _, vgs := range vgsList.Items {
+						if vgs.GetName() == snapshot.VGS.GetName() {
+							vgsUID = string(vgs.GetUID())
+							break
+						}
+					}
+					gomega.Expect(vgsUID).NotTo(gomega.BeEmpty(), "failed to get VGS UID")
+
+					// List VolumeSnapshots owned by this VGS
+					vss, err := dc.Resource(utils.SnapshotGVR).Namespace(f.Namespace.Name).List(ctx, metav1.ListOptions{})
+					framework.ExpectNoError(err, "failed to list VolumeSnapshots")
+
+					var preProvisionedSnapshots []string
+					for _, vs := range vss.Items {
+						for _, owner := range vs.GetOwnerReferences() {
+							if owner.Kind == "VolumeGroupSnapshot" && string(owner.UID) == vgsUID {
+								preProvisionedSnapshots = append(preProvisionedSnapshots, vs.GetName())
+								break
+							}
+						}
+					}
+					gomega.Expect(preProvisionedSnapshots).Should(gomega.HaveLen(groupTest.numReplicas), "failed to verify pre-provisioned snapshot count")
 
 					// Map snapshot index to original PVC name (snapshots are created in the same order as PVCs)
-					for i, vsName := range snapshot.PreProvisionedVolumeSnapshots {
+					for i, vsName := range preProvisionedSnapshots {
 						// Original PVC name for StatefulSet
 						originalPVCName := fmt.Sprintf("data-%s-%d", groupTest.statefulSet.Name, i)
 						restoredPVCName := fmt.Sprintf("restored-%s", originalPVCName)
