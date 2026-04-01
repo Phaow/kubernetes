@@ -475,8 +475,8 @@ func (d *Driver) SetUp(nodes *Nodes, driverResources map[string]resourceslice.Dr
 		if len(parts) < 2 {
 			continue
 		}
-		image, version := parts[0], parts[1]
-		if image != hostPathImage {
+		imageName, version := parts[0], parts[1]
+		if imageName != hostPathImage {
 			continue
 		}
 		// "Dumb" string comparison is good enough for e.g. v1.16.1 < v1.17.0.
@@ -485,6 +485,11 @@ func (d *Driver) SetUp(nodes *Nodes, driverResources map[string]resourceslice.Dr
 		if hostPathVersion == "" || hostPathVersion < version {
 			hostPathVersion = version
 		}
+	}
+	// Fallback to a known version if dynamic lookup fails
+	if hostPathVersion == "" {
+		framework.Logf("Warning: could not find hostpathplugin version in image configs (found %d total configs), falling back to v1.17.1", len(image.GetOriginalImageConfigs()))
+		hostPathVersion = "v1.17.1"
 	}
 	origImageURL := hostPathImage + ":" + hostPathVersion
 	patchedImageURL, err := image.ReplaceRegistryInImageURL(origImageURL)
